@@ -1,0 +1,287 @@
+
+Introduction
+
+Apache Kafka is an open-source event streaming platform for capturing real-time data. It's distributed, highly scalable, and fault-tolerant, but it can be challenging to monitor Kafka clusters. Ideally, you should be using distributed tracing to trace requests through your system. But Kafka decouples producers and consumers, which means there are no direct transactions to trace between them. Kafka also uses asynchronous processes, which have implicit, not explicit, dependencies. That makes it challenging to understand how your microservices are working together.
+
+However, it is possible to monitor your Kafka clusters with distributed tracing and OpenTelemetry. You can then analyze and visualize your traces in an open source distributed tracing tools like Jaeger or any full observability platform like Splunk APM, Appd APM, or ELK APM.
+
+The problem
+
+Users want to know how long would it take for a message to flow through the Kafka pipeline and have the results available in an output consumer. While it might look like a simple question, it hides immense complexity in a distributed system. Retrieving this type of information for each event passing through the pipeline is a difficult task without adequate monitoring.
+
+Once the data is written into Kafka, many different services aggregate, normalize, decorate, and transform it before it’s consumed. There are a lot of things that can potentially go wrong during the process, so we need to monitor our Kafka installation closely and fix issues quickly.
+
+
+Solution: OpenTelemetry, Distributed Tracing System.
+
+What is OpenTelemetry (In short)?
+
+In a world where microservices are becoming a standard architecture and distributed messaging systems like Kafka play a core part in enabling the independent microservices to communicate, the world needed a way to visualize and troubleshoot the complexity of a distributed architecture. 
+
+Led by the CNCF (Cloud Native Computing Foundation), OpenTelemetry is an open-source project, a set of APIs and SDKs, that allows us to collect, export, and generate traces, logs, and metrics. With OpenTelemetry, we gather data from the events happening within the different components in our systems (including all sorts of message brokers like Kafka), which ultimately help us understand our software’s performance and behavior and visualize our microservices architecture.
+
+OpenTelemetry Traces
+
+A trace tracks the progression of a single request, as it is handled by the different microservices/ moving parts. The atomic unit of work in a trace is called a span, for example, a call to a database, external service, send message to Kafka topic, etc. Each trace contains a collection of 1 or more spans and more information like how much time the entire trace took to complete.
+
+assign a trace id to each request
+include that id in all log messages
+pass that id through each service
+record the start and end time for each span id as it flows through.
+
+To remember:
+
+one trace id can be attached to multiple span ids
+one span id keeps track of metadata of a traced service + a parent id of the service sender
+a trace is a correlation of all spans for one trace id
+
+
+
+
+Instrumentation is a piece of code that is responsible for creating spans and traces and sending them to some backend, for later visualizing them. OpenTelemetry contains instrumentations for a lot of different libraries, including ones for Kafka.
+
+Benefits of distributed tracing with Kafka
+
+Let’s take a look at some of the benefits you’ll get from using distributed tracing with Kafka.
+
+Pinpoint bottlenecks in your streaming pipeline
+
+Without distributed tracing, you need to manually correlate logs across services and SaaS solutions. With distributed tracing, you don’t need to manually correlate your logs. You can trace the journey of a request across your systems, revealing bottlenecks instantly.
+
+Get visibility into downstream impacts of your services
+
+Even small changes in service in your streaming pipeline have the potential to disrupt upstream and downstream dependencies. With distributed tracing, you can use distributed traces to mitigate disruptions quickly. 
+
+Tracking data loss
+
+One of the challenges of Kafka at scale is tracking data loss. What if a Kafka broker deletes data after the configured retention time has passed? That data is gone and it’s hard to know what happened and how much data is missing. With distributed tracing, you can measure how and where data loss is happening by looking for traces with orphan spans. 
+
+Finetune consumer polling
+
+Kafka consumers poll upstream services when they are ready for new messages. When there are too many messages in the queue or any issues with consumer commits or transactions, or data issues, consumers stop requesting new records, which results in increased consumer lag. 
+
+Distributed tracing can help you optimize your consumer configuration to find an ideal balance between latency and throughput. You can adjust poll intervals with max.poll.interval.ms and total messages to be consumed per poll with max.poll.records, then use distributed tracing to see how your consumers are impacted.  
+
+Fine-tuning env variables for Kafka producers
+
+You can also use distributed tracing to optimize the configuration of your producer batch sizes. Kafka producers attempt to batch records into fewer requests when multiple records are being sent to the same partition.
+
+Kafka can achieve better compression when there are more messages in a batch because it’s likely there will be more repeatable data chunks to compress. The variable batch.size controls the default batch size in bytes. Whenever the number of messages in a batch reaches the limit set by batch.size, it gets compressed and sent to the broker. A small batch size makes batching less common and may reduce throughput (a batch size of zero will disable batching entirely). A very large batch size may use more memory because the batch size will have a buffer of the specified batch size for additional records.
+
+The variable linger.ms is the maximum amount of time a Kafka producer will wait for new messages before the messages are batched and sent to the broker. For example, the setting linger.ms=5 reduces the number of requests sent but adds up to 5ms of latency to records.
+
+How to trace Kafka with OpenTelemetry
+
+In order to create traces, distributed tracing uses context, which contains important information about requests. However, Kafka messages don’t automatically include context, which means you need to manually add it yourself. Apache Kafka introduced the ability to add headers to Kafka messages from version 0.11 onwards. A Header is a key-value pair, and multiple headers can be included with the key, value, and timestamp in each Kafka message. OpenTelemetry provides a library through which we can add all relevant tracing metadata into headers alongside Kafka messages.
+
+Fortunately, you can instruct your Kafka producers to inject context into message headers, which are just key-value pairs that contain metadata, similar to HTTP headers.
+
+One can use official Kafka libraries to inject context. To get complete tracing data, you’ll need to inject span data both when a message is created (at the producer level) and when the message is consumed (at the consumer level).
+
+There’s also one other important part of the equation: you need to add code so your Kafka consumers understand the span context you add. You can use otelsarama to do that, too.
+
+Sample code for openTelemetry on Kafka is as given in these links or some reference/case study etc
+https://github.com/lazyplatypus/kafkaopentelemetry
+
+Other useful links for a sample code base
+https://github.com/harnitsignalfx/otel-go-kafka-tracing
+https://github.com/open-telemetry/opentelemetry-go-contrib/tree/main/instrumentation/github.com/Shopify/sarama/otelsarama
+https://opentelemetry.io/docs/concepts/instrumenting-library/
+https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/3e08f36cfaf81d29f81d215b83743e775d988023/instrumentation/kafka/kafka-clients
+https://opentelemetry.io/docs/instrumentation/java/
+https://search.maven.org/artifact/io.opentelemetry.javaagent.instrumentation/opentelemetry-javaagent-kafka-streams-0.11
+https://mvnrepository.com/artifact/io.opentelemetry.javaagent.instrumentation/opentelemetry-javaagent-kafka-clients-common
+
+
+Injecting context into messages from Kafka producer
+Producer Instrumentation
+Goal
+
+Step 1
+
+
+We first initialize a tracing library. You are free to choose any library, in this example, the Jaeger tracing library
+// initTracer creates a new trace provider instance and registers it as a global trace provider.
+func tracerProvider(url string) (*sdktrace.TracerProvider, error)
+
+
+Step 2 
+
+We provide the endpoint we want to send our Jaeger traces to
+
+exp, err:= jaeger.NewRawExporter(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(url))
+
+Step 3
+
+We also provide a service name (required for any tracing instrumentation to recognize our service)
+
+attribute.String("service.name", "Kafka-producer")
+
+Step 4
+
+Create our parent producer span. We provide a name for our operation - “produce the message” in this case. And start a root span.
+
+ctx, span := tr.Start(context.Background(), "produce the message")
+
+Step 5 
+
+Kafka producers don’t include span data in message headers, but the otelsarama library provides the  WrapAsyncProducer function, which does exactly what it sounds like. It adds a wrapper to an async Kafka producer that provides new functionality. The function uses the propagator design pattern, which means that propagators are used to adding context to parts of a system that are otherwise independent. In this case, the wrapped producer uses the propagator pattern to pass a unique span to a message. The context in that span is passed downstream, accumulating more context along the way so that no context is ever lost—which is exactly what you need for distributed tracing.
+
+The full producer code can be found in this file:
+// Wrap instrumentation - pass in the tracer provider and the appropriate propagator
+producer = otelsarama.WrapAsyncProducer(config, producer,otelsarama.WithTracerProvider(tracerProvider),otelsarama.WithPropagators(propagators))
+
+
+
+This code wraps the Kafka producer so all messages it produces will be associated with a span, which allows downstream services to extract the parent span and create new child spans.
+
+otelsarama.WithPropagators gets passed in as an argument because the consumer should use the propagators from the producer, not the global provider, to create a continuous trace.
+
+Step 6
+
+Create a message and inject the tracer as a header into the message.
+
+// Inject tracing info into message
+    msg := sarama.ProducerMessage{
+        Topic: topicName,
+        Key:   sarama.StringEncoder("question"),
+        Value: sarama.StringEncoder(fmt.Sprintf("✋%s: %s", name, question)),
+    }
+
+
+Step 7
+
+Now that your producer is creating messages with spans that can be traced, you need to actually pass along the context that makes those traces useful. You can inject context as a header into Kafka messages with (&msg) using the OTel Propagators API.
+
+propagators := propagation.TraceContext{}
+propagators.Inject(ctx, otelsarama.NewProducerMessageCarrier(&msg))
+producer.Input() <- &msg
+
+The first line of this code registers OTel’s TraceContext propagator globally. Next, the code uses OTel’s Inject method along with otelsarama.NewProducerMessageCarrier to inject span context directly into the headers of the Kafka message.
+
+After the context is added to a message, the producer sends it to the Kafka broker. 
+
+View messages in Kafka
+
+You can see the headers of your Kafka messages by, a CLI to view messages in topics for Kafka or through the KPow tool or any other tool to monitor. 
+
+Your messages should include the relevant headers. The next image shows that message headers now include tracestate and traceparent keys.
+
+Enabling Kafka consumers to read incoming message context
+Consumer Instrumentation
+Goal
+
+A message’s span data should also include context about when the message is consumed. The span data that are injected when a producer creates a message won't give you a complete trace. It just tells you that a message has been created. We'll be instrumenting a high-level kafka consumer, also known as a consumer group. Kafka consumer group is a set of consumers who work together to consume data from topics.
+
+When a consumer processes a claim, it needs to log that the message has been successfully processed. That means you need to inject post-processing span data into each message.
+
+Step 1
+
+Similar to producer instrumentation, we begin by initiating the Jaeger tracer
+
+func tracerProvider(url string) (*sdktrace.TracerProvider, error)
+  
+
+Step 2
+
+We provide the endpoint we want to send our Jaeger traces to
+
+  // Create the Jaeger exporter
+    exp, err := jaeger.NewRawExporter(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(url)))
+
+Step 3
+
+We also provide a service name (required for any tracing instrumentation to recognize our service)
+
+attribute.String("service.name", "kafka-consumer"),
+
+Step 4
+
+Start a consumer group using the opentelemetry consumer group wrapped handler and we provide it with the appropriate trace propagators. The startConsumerGroup function uses the otelsarama library to wrap consumers with the functionality needed to add additional context to incoming messages. Then it uses Shopify’s sarama library to instantiate a new consumer group and start consuming messages. 
+
+handler:= otelsarama.WrapConsumerGroupHandler(&consumerGroupHandler,otelsarama.WithPropagators(propagators))
+
+Here, OpenTelemetry is extracting that parent span that the producer created for each message.
+
+Step 5
+
+Create a consumer claim as we read each message. Add a new method to do some additional processing on that message (in this case, it is trivial processing — simply printing the message).
+
+// ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
+func (consumer *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+    // NOTE:
+    // Do not move the code below to a goroutine.
+    // The `ConsumeClaim` itself is called within a goroutine, see:
+    // https://github.com/Shopify/sarama/blob/master/consumer_group.go#L27-L29
+    for message := range claim.Messages() {
+        time.Sleep(1 * time.Second)
+        printMessage(message)
+        session.MarkMessage(message, "")
+
+Step 6
+
+The next step is to add a child span with a new context. Start by extracting the parent span. Opentelemetry passes all tracing data around within this context object. In our example, the parent span, stored within the context object, represents the kafka. consume operation instrumented by the opentelemetry wrapper that we used. Next, you simply create a new span and associate it with the context, which will set up our new span as a child of the parent span.
+
+propagators := propagation.TraceContext{}
+    ctx := propagators.Extract(context.Background(), otelsarama.NewConsumerMessageCarrier(msg))
+// Create a post-processing span from the context object, thus setting it as a child of the span that already exists within the context object.
+_, span := openTelemetryTracer.Start(ctx, "consume message")
+
+openTelemetryTracer is the instantiated OpenTelemetry tracer, which adds ”consume message” to the context (ctx). By using the propagator model, OpenTelemetry can inject context wherever you manually instrument your code, giving you detailed tracing data as it moves through each downstream service.
+
+Step 7
+
+Set optional span attributes. Partition and topic of the message because these attributes get automatically captured in our parent span (the one that represented the kafka.consume operation in Step 4) by the open telemetry instrumentation.
+
+span.SetAttributes(attribute.String("test-consumer-span-key", "test-consumer-span-value"))
+// Set any additional attributes that might make sense
+// span.SetAttributes(attribute.String("consumed message at offset",strconv.FormatInt(int64(msg.Offset),10)))
+// span.SetAttributes(attribute.String("consumed message to partition",strconv.FormatInt(int64(msg.Partition),10)))
+//    span.SetAttributes(attribute.String("message_bus.destination", msg.Topic))
+    }
+
+
+Step 8 (Optional)
+
+Optionally, you can also inject the current span, the one we called the post-processing span, into the context object. This way any further processing or in any downstream service/microservice can be captured as part of the same transaction/trace.
+
+// Inject current span into the context object.
+propagators.Inject(ctx, otelsarama.NewConsumerMessageCarrier(msg))
+
+Sample Message Header
+
+
+
+
+Visualizing the data in Jaeger
+
+Now that instrumentalization is successful and the goal has been achieved. Let's see where we stand now
+
+The code should include a Jaeger exporter so you can visualize the traces with Jaeger. Use a browser to go to http://localhost:16686/
+
+
+
+
+You can see the end-to-end journey of a request in a waterfall graph, with the latency associated with each request, as well as other metadata like destination topic, message id, and partition in Jaeger.
+
+Conclusion
+
+Distributed tracing is a powerful tool that can help you quickly pinpoint performance bottlenecks and reduce your mean time to resolution. When you do have distributed tracing implemented with Kafka, it helps you get better visibility into issues and helps you optimize your data ingest pipeline. With distributed tracing, you can gather important data about when messages are produced and consumed, giving you valuable insights into how you can optimize your Kafka producers and consumers for peak performance.
+
+References
+
+https://www.splunk.com/en_us/blog/devops/distributed-tracing-for-kafka-clients-with-opentelemetry-and-splunk-apm.html
+https://newrelic.com/blog/how-to-relic/distributed-tracing-with-kafka
+https://www.aspecto.io/blog/distributed-tracing-for-kafka-with-opentelemetry-in-python/
+https://www.confluent.io/events/kafka-summit-london-2022/distributed-tracing-for-kafka-with-opentelemetry/
+https://signoz.io/opentelemetry/java-agent/
+https://www.confluent.io/blog/fault-tolerance-distributed-systems-tracing-with-apache-kafka-jaeger/
+If we want to try through Zipkin -
+https://www.confluent.io/blog/importance-of-distributed-tracing-for-apache-kafka-based-applications/
+https://medium.com/data-rocks/kafka-record-tracing-379ed2b0af51 
+https://github.com/data-rocks-team/kafka-distributed-tracing
+https://github.com/artemyarulin/kafka-tracing-example
+https://github.com/ThinkportRepo/kafka_zipkin_demo
+https://github.com/pervage-qa/kafka-distributed-tracing
+
+
